@@ -1,0 +1,265 @@
+import React, { useState, useEffect } from 'react';
+import { GameState, Difficulty, Question } from './types';
+import { generateQuiz } from './services/questionGenerator';
+import { Staff } from './components/Staff';
+import confetti from 'canvas-confetti';
+import { Music, Award, Play, RotateCcw, ChevronRight, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+
+const App: React.FC = () => {
+  const [gameState, setGameState] = useState<GameState>({
+    status: 'menu',
+    difficulty: 'beginner',
+    currentQuestionIndex: 0,
+    score: 0,
+    questions: [],
+    history: []
+  });
+  
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
+
+  const startGame = (difficulty: Difficulty) => {
+    const questions = generateQuiz(difficulty);
+    setGameState({
+      status: 'playing',
+      difficulty,
+      currentQuestionIndex: 0,
+      score: 0,
+      questions,
+      history: []
+    });
+    setSelectedOption(null);
+    setFeedback(null);
+  };
+
+  const handleAnswer = (option: string) => {
+    if (selectedOption || feedback) return; // Prevent double click
+
+    const currentQ = gameState.questions[gameState.currentQuestionIndex];
+    const isCorrect = option === currentQ.correctAnswer;
+    
+    setSelectedOption(option);
+    setFeedback(isCorrect ? 'correct' : 'incorrect');
+
+    if (isCorrect) {
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.8 },
+        colors: ['#22c55e', '#ffffff'] // Green and white
+      });
+    }
+
+    setTimeout(() => {
+      // Record history
+      const newHistoryEntry = {
+        question: currentQ,
+        userAnswer: option,
+        isCorrect
+      };
+
+      if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
+        setGameState(prev => ({
+          ...prev,
+          score: isCorrect ? prev.score + 1 : prev.score,
+          currentQuestionIndex: prev.currentQuestionIndex + 1,
+          history: [...prev.history, newHistoryEntry]
+        }));
+        setSelectedOption(null);
+        setFeedback(null);
+      } else {
+        finishGame(isCorrect, newHistoryEntry);
+      }
+    }, 1500);
+  };
+
+  const finishGame = (lastCorrect: boolean, lastHistoryEntry: GameState['history'][0]) => {
+    setGameState(prev => ({
+        ...prev,
+        score: lastCorrect ? prev.score + 1 : prev.score,
+        status: 'result',
+        history: [...prev.history, lastHistoryEntry]
+    }));
+    if (lastCorrect) confetti({ particleCount: 150, spread: 100 });
+  };
+
+  const renderMenu = () => (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 p-6 text-white">
+      <div className="mb-10 text-center animate-fade-in-down">
+        <Music className="w-20 h-20 mx-auto mb-4 text-pink-400" />
+        <h1 className="text-5xl font-extrabold mb-2 tracking-tight">Maestro Quiz</h1>
+        <p className="text-indigo-200 text-lg">音楽の知識をテストしよう！</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+        {[
+          { id: 'beginner', title: '初級', desc: '基本のドレミ (C4-C5)', color: 'bg-green-500 hover:bg-green-600', icon: '🎵' },
+          { id: 'intermediate', title: '中級', desc: '広い音域 (全音符のみ)', color: 'bg-blue-500 hover:bg-blue-600', icon: '🎹' },
+          { id: 'advanced', title: '上級', desc: 'リズム・記号・広音域', color: 'bg-red-500 hover:bg-red-600', icon: '🔥' }
+        ].map((level) => (
+          <button
+            key={level.id}
+            onClick={() => startGame(level.id as Difficulty)}
+            className={`${level.color} rounded-2xl p-8 transition-all transform hover:scale-105 shadow-xl flex flex-col items-center group`}
+          >
+            <span className="text-4xl mb-4 group-hover:animate-bounce">{level.icon}</span>
+            <h2 className="text-2xl font-bold mb-2">{level.title}</h2>
+            <p className="text-sm opacity-90">{level.desc}</p>
+          </button>
+        ))}
+      </div>
+      
+      <div className="mt-12 text-sm text-indigo-300 opacity-60">
+        © 2026 Maestro Quiz
+      </div>
+    </div>
+  );
+
+  const renderGame = () => {
+    const question = gameState.questions[gameState.currentQuestionIndex];
+    if (!question) return null;
+
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
+        {/* Header */}
+        <div className="w-full max-w-3xl flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm">
+          <button onClick={() => setGameState({...gameState, status: 'menu'})} className="text-slate-500 hover:text-slate-700 font-medium">
+            &larr; メニュー
+          </button>
+          <div className="flex flex-col items-center">
+             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{gameState.difficulty.toUpperCase()}</span>
+             <div className="flex gap-1 mt-1">
+                {gameState.questions.map((_, i) => (
+                    <div key={i} className={`w-3 h-3 rounded-full ${i === gameState.currentQuestionIndex ? 'bg-indigo-600' : i < gameState.currentQuestionIndex ? 'bg-indigo-300' : 'bg-slate-200'}`} />
+                ))}
+             </div>
+          </div>
+          <div className="text-xl font-bold text-indigo-900">
+            Q {gameState.currentQuestionIndex + 1} <span className="text-slate-400 text-sm">/ 10</span>
+          </div>
+        </div>
+
+        {/* Question Area */}
+        <div className="w-full max-w-3xl animate-fade-in">
+            <h2 className="text-2xl font-bold text-center mb-6 text-slate-800">{question.questionText}</h2>
+            
+            <Staff data={question.renderData} className="mb-10 mx-auto" />
+
+            {/* Options */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {question.options.map((option, idx) => {
+                    let btnClass = "bg-white border-2 border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50";
+                    if (selectedOption) {
+                        if (option === question.correctAnswer) {
+                            btnClass = "bg-green-100 border-2 border-green-500 text-green-800 font-bold";
+                        } else if (option === selectedOption) {
+                            btnClass = "bg-red-100 border-2 border-red-500 text-red-800";
+                        } else {
+                            btnClass = "opacity-50 bg-slate-100 border-slate-200";
+                        }
+                    }
+
+                    return (
+                        <button
+                            key={idx}
+                            onClick={() => handleAnswer(option)}
+                            disabled={!!selectedOption}
+                            className={`p-5 rounded-xl text-lg transition-all duration-200 relative overflow-hidden ${btnClass}`}
+                        >
+                            {option}
+                            {selectedOption && option === question.correctAnswer && (
+                                <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 text-green-600" />
+                            )}
+                             {selectedOption && option === selectedOption && option !== question.correctAnswer && (
+                                <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 text-red-600" />
+                            )}
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderResult = () => {
+    const wrongAnswers = gameState.history.filter(h => !h.isCorrect);
+
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-lg w-full text-center animate-scale-up mb-8">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-yellow-100 rounded-full mb-6 text-yellow-500">
+              <Award size={48} />
+          </div>
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">結果発表!</h2>
+          <div className="text-6xl font-black text-indigo-600 mb-4">
+              {gameState.score} <span className="text-2xl text-slate-400 font-normal">/ 10</span>
+          </div>
+          
+          <p className="text-slate-600 mb-8">
+              {gameState.score === 10 ? '完璧です！マエストロ！🏆' : 
+              gameState.score >= 7 ? '素晴らしい成績です！✨' : 
+              gameState.score >= 4 ? 'よく頑張りました！👍' : 'もう少し練習しましょう！🎵'}
+          </p>
+
+          <div className="flex flex-col gap-3">
+              <button 
+                  onClick={() => startGame(gameState.difficulty)}
+                  className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+              >
+                  <RotateCcw size={20} /> もう一度挑戦する
+              </button>
+              <button 
+                  onClick={() => setGameState({...gameState, status: 'menu'})}
+                  className="w-full bg-slate-100 text-slate-600 py-4 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+              >
+                  メニューに戻る
+              </button>
+          </div>
+        </div>
+
+        {wrongAnswers.length > 0 && (
+          <div className="w-full max-w-2xl animate-fade-in-up">
+            <h3 className="text-xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+              <AlertCircle className="text-red-500" /> 間違えた問題の復習
+            </h3>
+            <div className="space-y-4">
+              {wrongAnswers.map((item, idx) => (
+                <div key={idx} className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                   <div className="flex flex-col md:flex-row gap-6 items-center">
+                      <div className="transform scale-75 origin-left -my-6 -ml-4">
+                         <Staff data={item.question.renderData} />
+                      </div>
+                      <div className="flex-1 w-full">
+                         <h4 className="font-bold text-slate-800 mb-2">{item.question.questionText}</h4>
+                         <div className="grid grid-cols-1 gap-2 text-sm">
+                            <div className="flex items-center gap-2 bg-red-50 p-2 rounded-lg text-red-800 border border-red-100">
+                               <XCircle size={16} /> 
+                               <span className="font-bold">あなたの回答:</span> {item.userAnswer}
+                            </div>
+                            <div className="flex items-center gap-2 bg-green-50 p-2 rounded-lg text-green-800 border border-green-100">
+                               <CheckCircle2 size={16} /> 
+                               <span className="font-bold">正解:</span> {item.question.correctAnswer}
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="antialiased text-slate-900">
+      {gameState.status === 'menu' && renderMenu()}
+      {gameState.status === 'playing' && renderGame()}
+      {gameState.status === 'result' && renderResult()}
+    </div>
+  );
+};
+
+export default App;
