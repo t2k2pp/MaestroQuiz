@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { GameState, Difficulty, Question } from './types';
+import React, { useState } from 'react';
+import { GameState, Difficulty } from './types';
 import { generateQuiz } from './services/questionGenerator';
 import { Staff } from './components/Staff';
 import confetti from 'canvas-confetti';
-import { Music, Award, Play, RotateCcw, ChevronRight, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Music, Award, RotateCcw, CheckCircle2, XCircle, AlertCircle, BookOpen } from 'lucide-react';
+import { MUSICAL_SYMBOLS, DURATION_NAMES } from './constants';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
@@ -33,7 +34,7 @@ const App: React.FC = () => {
   };
 
   const handleAnswer = (option: string) => {
-    if (selectedOption || feedback) return; // Prevent double click
+    if (selectedOption || feedback) return;
 
     const currentQ = gameState.questions[gameState.currentQuestionIndex];
     const isCorrect = option === currentQ.correctAnswer;
@@ -46,12 +47,11 @@ const App: React.FC = () => {
         particleCount: 50,
         spread: 60,
         origin: { y: 0.8 },
-        colors: ['#22c55e', '#ffffff'] // Green and white
+        colors: ['#22c55e', '#ffffff']
       });
     }
 
     setTimeout(() => {
-      // Record history
       const newHistoryEntry = {
         question: currentQ,
         userAnswer: option,
@@ -91,10 +91,10 @@ const App: React.FC = () => {
         <p className="text-indigo-200 text-lg">音楽の知識をテストしよう！</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
         {[
           { id: 'beginner', title: '初級', desc: '基本のドレミ (C4-C5)', color: 'bg-green-500 hover:bg-green-600', icon: '🎵' },
-          { id: 'intermediate', title: '中級', desc: '広い音域 (全音符のみ)', color: 'bg-blue-500 hover:bg-blue-600', icon: '🎹' },
+          { id: 'intermediate', title: '中級', desc: '広い音域・ヘ音記号', color: 'bg-blue-500 hover:bg-blue-600', icon: '🎹' },
           { id: 'advanced', title: '上級', desc: 'リズム・記号・広音域', color: 'bg-red-500 hover:bg-red-600', icon: '🔥' }
         ].map((level) => (
           <button
@@ -109,9 +109,96 @@ const App: React.FC = () => {
         ))}
       </div>
       
+      <button 
+        onClick={() => setGameState({...gameState, status: 'reference'})}
+        className="bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-8 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
+      >
+        <BookOpen size={20} /> 学習モード (暗記リスト)
+      </button>
+
       <div className="mt-12 text-sm text-indigo-300 opacity-60">
         © 2026 Maestro Quiz
       </div>
+    </div>
+  );
+
+  const renderReference = () => (
+    <div className="min-h-screen bg-slate-50 p-6">
+       <div className="max-w-4xl mx-auto">
+          <button 
+            onClick={() => setGameState({...gameState, status: 'menu'})} 
+            className="mb-6 text-indigo-600 font-bold flex items-center gap-2 hover:underline"
+          >
+            &larr; メニューに戻る
+          </button>
+          
+          <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3">
+             <BookOpen className="text-indigo-600" /> 学習・暗記リスト
+          </h2>
+
+          {/* Section 1: Notes */}
+          <section className="mb-12">
+            <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎵 音階 (ドレミ)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="bg-white p-6 rounded-xl shadow-sm">
+                  <h4 className="font-bold text-center mb-4">ト音記号 (高音・基本)</h4>
+                  <div className="flex flex-wrap justify-center gap-4">
+                     {['C4', 'E4', 'G4', 'B4', 'D5', 'F5'].map((pitch, i) => (
+                        <div key={i} className="flex flex-col items-center">
+                            <div className="transform scale-75 origin-top">
+                                <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
+                            </div>
+                            <span className="text-sm font-bold mt-[-20px]">{pitch}</span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+               <div className="bg-white p-6 rounded-xl shadow-sm">
+                  <h4 className="font-bold text-center mb-4">ヘ音記号 (低音)</h4>
+                  <div className="flex flex-wrap justify-center gap-4">
+                     {['C2', 'E2', 'G2', 'B2', 'C3', 'E3'].map((pitch, i) => (
+                        <div key={i} className="flex flex-col items-center">
+                            <div className="transform scale-75 origin-top">
+                                <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
+                            </div>
+                            <span className="text-sm font-bold mt-[-20px]">{pitch}</span>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            </div>
+          </section>
+
+          {/* Section 2: Durations */}
+          <section className="mb-12">
+            <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">⏱️ 音符の種類・長さ</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {Object.keys(DURATION_NAMES).map((key) => (
+                    <div key={key} className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center text-center">
+                        <div className="transform scale-50 origin-top h-24 w-full flex justify-center overflow-hidden">
+                             <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
+                        </div>
+                        <span className="font-bold text-sm mt-2">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
+                    </div>
+                ))}
+            </div>
+          </section>
+
+           {/* Section 3: Symbols */}
+           <section className="mb-12">
+            <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎼 記号・休符</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {MUSICAL_SYMBOLS.map((sym, i) => (
+                    <div key={i} className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center text-center">
+                        <div className="transform scale-50 origin-top h-28 w-full flex justify-center overflow-hidden">
+                             <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
+                        </div>
+                        <span className="font-bold text-xs mt-[-10px]">{sym.answer}</span>
+                    </div>
+                ))}
+            </div>
+          </section>
+       </div>
     </div>
   );
 
@@ -256,6 +343,7 @@ const App: React.FC = () => {
   return (
     <div className="antialiased text-slate-900">
       {gameState.status === 'menu' && renderMenu()}
+      {gameState.status === 'reference' && renderReference()}
       {gameState.status === 'playing' && renderGame()}
       {gameState.status === 'result' && renderResult()}
     </div>

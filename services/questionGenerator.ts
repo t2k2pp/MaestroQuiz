@@ -1,44 +1,56 @@
-import { Difficulty, Question, QuestionType, NoteDuration } from '../types';
-import { PITCH_NAMES, DURATION_NAMES, MUSICAL_SYMBOLS, shuffleArray, ALL_DURATION_LABELS } from '../constants';
+import { Difficulty, Question, QuestionType, NoteDuration, RenderData } from '../types';
+import { PITCH_NAMES, DURATION_NAMES, MUSICAL_SYMBOLS, shuffleArray } from '../constants';
 
 const generatePitchQuestion = (difficulty: Difficulty, index: number): Question => {
-  // 1. Determine Range
-  // Beginner: C4 - C5
-  // Intermediate/Advanced: G3 - A5 (Approx range of typical treble staff + ledger lines)
+  // Logic:
+  // Beginner: Treble Clef C4 - C5 (No change)
+  // Intermediate/Advanced: Wider range. 
+  //   - If note is low (e.g. < C4), use Bass Clef roughly half the time or if it makes sense.
+  //   - Let's define: High (C4-A5) -> Treble. Low (C2-B3) -> Bass.
+  
+  let clef: 'treble' | 'bass' = 'treble';
   let minOctave = 4, maxOctave = 5;
-  if (difficulty !== 'beginner') {
-    minOctave = 3;
-    maxOctave = 6; // Expanded range
+
+  if (difficulty === 'beginner') {
+    clef = 'treble';
+    minOctave = 4;
+    maxOctave = 5;
+  } else {
+    // 50% chance of Bass Clef for wider range practice
+    clef = Math.random() > 0.5 ? 'bass' : 'treble';
+    
+    if (clef === 'treble') {
+       minOctave = 4; // C4 to A5
+       maxOctave = 5;
+    } else {
+       minOctave = 2; // C2 to E4
+       maxOctave = 3;
+    }
   }
 
   const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
   
   // Randomly select a note
-  const octave = Math.floor(Math.random() * (maxOctave - minOctave + 1)) + minOctave;
-  const noteName = notes[Math.floor(Math.random() * notes.length)];
+  let octave = Math.floor(Math.random() * (maxOctave - minOctave + 1)) + minOctave;
+  let noteName = notes[Math.floor(Math.random() * notes.length)];
   
-  // Constrain limits closer for playability if needed, but strict logic:
-  // Beginner: C4 to C5.
-  let validNote = noteName;
-  let validOctave = octave;
-
+  // Constrain limits
   if (difficulty === 'beginner') {
-    validOctave = Math.random() > 0.5 ? 4 : 5;
-    if (validOctave === 5 && validNote !== 'C') validOctave = 4; // Only allow C5 max
-    if (validOctave === 4 && validNote === 'C') validOctave = 4; // C4 min
+    // Force C4-C5 range strictly
+    if (octave === 5 && noteName !== 'C') octave = 4;
+    if (octave === 4 && noteName === 'C') octave = 4; // ok
   }
 
   // Pitch Label (Correct Answer)
-  const pitchIndex = notes.indexOf(validNote);
+  const pitchIndex = notes.indexOf(noteName);
   const correctAnswer = PITCH_NAMES[pitchIndex];
 
   // Distractors
-  // Fix: Ensure correct answer is included by selecting distractors separately then combining
   const distractors = PITCH_NAMES.filter(n => n !== correctAnswer);
-  const selectedDistractors = shuffleArray(distractors).slice(0, 5); // Pick 5 distractors
+  const selectedDistractors = shuffleArray(distractors).slice(0, 5); 
   const options = shuffleArray([correctAnswer, ...selectedDistractors]);
 
-  // Note Duration (Only Advanced has varied rhythms here)
+  // Note Duration
   let duration: NoteDuration = 'whole';
   if (difficulty === 'advanced') {
     const durations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth'];
@@ -48,10 +60,11 @@ const generatePitchQuestion = (difficulty: Difficulty, index: number): Question 
   return {
     id: `q-${index}`,
     type: QuestionType.PITCH,
-    questionText: 'この音符の音階は？',
+    questionText: `この音符の音階は？ (${clef === 'treble' ? 'ト音記号' : 'ヘ音記号'})`,
     renderData: {
+      clef: clef,
       note: {
-        pitch: `${validNote}${validOctave}`,
+        pitch: `${noteName}${octave}`,
         duration: duration
       }
     },
@@ -72,12 +85,12 @@ const generateDurationQuestion = (index: number): Question => {
   const selectedDistractors = shuffleArray(distractors).slice(0, 5);
   const options = shuffleArray([correctAnswer, ...selectedDistractors]);
 
-  // Random pitch for display (usually middle of staff like B4)
   return {
     id: `q-${index}`,
     type: QuestionType.DURATION,
     questionText: 'この音符の種類は？',
     renderData: {
+      clef: 'treble',
       note: {
         pitch: 'B4', 
         duration: targetDuration
@@ -121,7 +134,7 @@ export const generateQuiz = (difficulty: Difficulty): Question[] => {
     if (difficulty === 'beginner' || difficulty === 'intermediate') {
       questions.push(generatePitchQuestion(difficulty, i));
     } else {
-      // Advanced: Mix of Pitch, Duration, and Symbols
+      // Advanced: Mix
       const roll = Math.random();
       if (roll < 0.4) {
         questions.push(generatePitchQuestion('advanced', i));

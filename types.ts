@@ -17,6 +17,7 @@ export interface Question {
 
 // Data needed to render the staff or symbol
 export interface RenderData {
+  clef?: 'treble' | 'bass'; // Clef for the staff
   // For PITCH and DURATION
   note?: {
     pitch: string; // e.g., "C4", "A5"
@@ -36,7 +37,7 @@ export interface RenderData {
 export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth' | 'thirty-second';
 
 export interface GameState {
-  status: 'menu' | 'playing' | 'result';
+  status: 'menu' | 'playing' | 'result' | 'reference';
   difficulty: Difficulty;
   currentQuestionIndex: number;
   score: number;
