@@ -95,38 +95,38 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
           />
         )}
 
-        {/* Flags - Updated to be STROKE based (Line-like) instead of Filled Shapes */}
+        {/* Flags - Updated to be BULGIER (Deeper curve) */}
         {noteData.duration !== 'whole' && noteData.duration !== 'half' && noteData.duration !== 'quarter' && (
             <g fill="none" stroke={noteColor} strokeWidth="4" strokeLinecap="round">
                 {stemDirection === 'up' && (
                     <>
-                        {/* 8th Note Flag (Stem Up) */}
-                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 18} ${stemEndY + 25} ${stemX} ${stemEndY + 45}`} />
+                        {/* 8th Note Flag (Stem Up) - Control point X increased to 34 for more bulge */}
+                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 34} ${stemEndY + 25} ${stemX} ${stemEndY + 50}`} />
 
                         {/* 16th Note Flag */}
                         {(noteData.duration === 'sixteenth' || noteData.duration === 'thirty-second') && (
-                             <path d={`M ${stemX} ${stemEndY + 15} Q ${stemX + 18} ${stemEndY + 40} ${stemX} ${stemEndY + 60}`} />
+                             <path d={`M ${stemX} ${stemEndY + 15} Q ${stemX + 34} ${stemEndY + 40} ${stemX} ${stemEndY + 65}`} />
                         )}
 
                         {/* 32nd Note Flag */}
                         {noteData.duration === 'thirty-second' && (
-                             <path d={`M ${stemX} ${stemEndY + 30} Q ${stemX + 18} ${stemEndY + 55} ${stemX} ${stemEndY + 75}`} />
+                             <path d={`M ${stemX} ${stemEndY + 30} Q ${stemX + 34} ${stemEndY + 55} ${stemX} ${stemEndY + 80}`} />
                         )}
                     </>
                 )}
                 {stemDirection === 'down' && (
                     <>
                         {/* 8th Note Flag (Stem Down) */}
-                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 18} ${stemEndY - 25} ${stemX} ${stemEndY - 45}`} />
+                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 34} ${stemEndY - 25} ${stemX} ${stemEndY - 50}`} />
 
                         {/* 16th Note Flag */}
                         {(noteData.duration === 'sixteenth' || noteData.duration === 'thirty-second') && (
-                             <path d={`M ${stemX} ${stemEndY - 15} Q ${stemX + 18} ${stemEndY - 40} ${stemX} ${stemEndY - 60}`} />
+                             <path d={`M ${stemX} ${stemEndY - 15} Q ${stemX + 34} ${stemEndY - 40} ${stemX} ${stemEndY - 65}`} />
                         )}
 
                         {/* 32nd Note Flag */}
                          {noteData.duration === 'thirty-second' && (
-                             <path d={`M ${stemX} ${stemEndY - 30} Q ${stemX + 18} ${stemEndY - 55} ${stemX} ${stemEndY - 75}`} />
+                             <path d={`M ${stemX} ${stemEndY - 30} Q ${stemX + 34} ${stemEndY - 55} ${stemX} ${stemEndY - 80}`} />
                         )}
                     </>
                 )}
@@ -206,7 +206,7 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
   const isSymbolWithStaff = data.symbol && ['whole_rest', 'half_rest', 'quarter_rest', 'eighth_rest'].includes(data.symbol.value);
 
   return (
-    <div className={`flex justify-center items-center bg-white rounded-xl shadow-inner border-2 border-slate-200 p-4 ${className}`} style={{ transform: `scale(${scale})` }}>
+    <div className={`flex justify-center items-center bg-white rounded-xl shadow-inner border-2 border-slate-200 p-4 ${className}`} style={{ transformOrigin: 'top left', transform: `scale(${scale})` }}>
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         {/* Render Lines */}
         {(data.note || isSymbolWithStaff) && (

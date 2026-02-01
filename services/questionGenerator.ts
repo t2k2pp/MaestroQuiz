@@ -1,7 +1,7 @@
 import { Difficulty, Question, QuestionType, NoteDuration, RenderData, ItemStats } from '../types';
 import { PITCH_NAMES, DURATION_NAMES, MUSICAL_SYMBOLS, shuffleArray } from '../constants';
 
-// Helper to pick an item, prioritizing weaknesses if adaptive mode is on
+// Helper to pick weighted items
 const pickWeightedItem = <T>(
   items: T[], 
   getKey: (item: T) => string, 
@@ -9,27 +9,17 @@ const pickWeightedItem = <T>(
   isAdaptive: boolean,
   lastAnswer?: string
 ): T => {
-  // Filter out the last answer to prevent immediate repeats
   let pool = items.filter(item => getKey(item) !== lastAnswer);
-  
-  // Fallback if pool is empty (shouldn't happen with large sets, but safe guard)
   if (pool.length === 0) pool = items;
 
   if (!isAdaptive) {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  // Create a weighted pool
   const weightedPool: T[] = [];
-  
   pool.forEach(item => {
     const key = getKey(item);
     const itemStats = stats[key] || { correct: 0, wrong: 0 };
-    // Weight algorithm: Base 1 + (Wrongs * 3). 
-    // If you got it wrong 2 times, it appears 7 times in the pool.
-    // If you got it correct a lot, we reduce chance slightly, but keep at least 1.
-    
-    // Simple approach: Add (Wrong^2 + 1) copies.
     const weight = (itemStats.wrong * 2) + 1;
     for (let i = 0; i < weight; i++) {
       weightedPool.push(item);
@@ -39,164 +29,175 @@ const pickWeightedItem = <T>(
   return weightedPool[Math.floor(Math.random() * weightedPool.length)];
 };
 
-const generatePitchQuestion = (difficulty: Difficulty, index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
-  let clef: 'treble' | 'bass' = 'treble';
-  let minOctave = 4, maxOctave = 5;
+const createNoteQuestion = (
+  index: number,
+  clef: 'treble' | 'bass',
+  notes: string[], // e.g. ['C', 'D'...]
+  minOctave: number,
+  maxOctave: number,
+  allowedDurations: NoteDuration[],
+  stats: Record<string, ItemStats>,
+  isAdaptive: boolean,
+  lastAnswer?: string,
+  isDurationQuestion: boolean = false
+): Question => {
+  
+  // 1. Select Duration
+  const duration = allowedDurations[Math.floor(Math.random() * allowedDurations.length)];
 
-  if (difficulty === 'beginner') {
-    clef = 'treble';
-    minOctave = 4;
-    maxOctave = 5;
+  // 2. Select Pitch
+  const noteName = notes[Math.floor(Math.random() * notes.length)];
+  let octave = Math.floor(Math.random() * (maxOctave - minOctave + 1)) + minOctave;
+
+  // Adjust for edges
+  if (octave === maxOctave && noteName !== 'C' && Math.random() > 0.5) {
+      octave = maxOctave - 1; // avoid going too high if list is partial
+  }
+
+  const pitch = `${noteName}${octave}`;
+  
+  // 3. Form Question
+  if (isDurationQuestion) {
+      const correctAnswer = DURATION_NAMES[duration];
+      const distractors = Object.values(DURATION_NAMES).filter(d => d !== correctAnswer);
+      const options = shuffleArray([correctAnswer, ...shuffleArray(distractors).slice(0, 5)]);
+
+      return {
+        id: `q-${index}`,
+        type: QuestionType.DURATION,
+        questionText: 'この音符の種類（長さ）は？',
+        renderData: { clef, note: { pitch, duration } },
+        options,
+        correctAnswer
+      };
+
   } else {
-    clef = Math.random() > 0.5 ? 'bass' : 'treble';
-    if (clef === 'treble') {
-       minOctave = 4; maxOctave = 5;
-    } else {
-       minOctave = 2; maxOctave = 3;
+      // PITCH Question
+      const pitchIndex = ['C','D','E','F','G','A','B'].indexOf(noteName);
+      const correctAnswer = PITCH_NAMES[pitchIndex];
+      const distractors = PITCH_NAMES.filter(n => n !== correctAnswer);
+      const options = shuffleArray([correctAnswer, ...shuffleArray(distractors).slice(0, 5)]);
+
+      return {
+        id: `q-${index}`,
+        type: QuestionType.PITCH,
+        questionText: `この音符の音階は？ (${clef === 'treble' ? 'ト音記号' : 'ヘ音記号'})`,
+        renderData: { clef, note: { pitch, duration } },
+        options,
+        correctAnswer
+      };
+  }
+};
+
+const createSymbolQuestion = (
+    index: number,
+    filterTypes: string[], // 'dynamics', 'accidentals', 'rests', 'structure'
+    stats: Record<string, ItemStats>,
+    isAdaptive: boolean,
+    lastAnswer?: string
+): Question => {
+    
+    // Filter symbols based on category
+    let pool = MUSICAL_SYMBOLS;
+    if (filterTypes.length > 0) {
+        pool = MUSICAL_SYMBOLS.filter(s => {
+            if (filterTypes.includes('dynamics') && ['ff','pp','mf','mp','f','p','cresc.','dim.'].includes(s.value)) return true;
+            if (filterTypes.includes('accidentals') && ['sharp','flat','natural'].includes(s.value)) return true;
+            if (filterTypes.includes('structure') && ['treble_clef','bass_clef','repeat_start','tie','fermata'].includes(s.value)) return true;
+            if (filterTypes.includes('rests') && ['whole_rest','half_rest','quarter_rest','eighth_rest'].includes(s.value)) return true;
+            return false;
+        });
     }
-  }
 
-  const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-  
-  // Create all possible note combinations for this setting to pick from
-  const candidates: {note: string, octave: number}[] = [];
-  for (let o = minOctave; o <= maxOctave; o++) {
-    for (const n of notes) {
-        if (difficulty === 'beginner') {
-            if (o === 5 && n !== 'C') continue;
-            if (o === 4 && n === 'C' && Math.random() > 0.1) continue; // Small bias to avoid too many Middle Cs if random
-        }
-        candidates.push({ note: n, octave: o });
+    const target = pickWeightedItem(pool, s => s.answer, stats, isAdaptive, lastAnswer);
+    const correctAnswer = target.answer;
+    const distractors = MUSICAL_SYMBOLS.map(s => s.answer).filter(a => a !== correctAnswer);
+    const options = shuffleArray([correctAnswer, ...shuffleArray(distractors).slice(0, 5)]);
+
+    return {
+        id: `q-${index}`,
+        type: QuestionType.SYMBOL,
+        questionText: 'この記号の意味は？',
+        renderData: { symbol: { type: target.type as any, value: target.value } },
+        options,
+        correctAnswer
     }
-  }
-
-  // Pick one using weighted logic
-  const selection = pickWeightedItem(
-    candidates, 
-    (c) => PITCH_NAMES[notes.indexOf(c.note)], // Key is the Answer Text
-    stats, 
-    isAdaptive,
-    lastAnswer
-  );
-
-  const noteName = selection.note;
-  const octave = selection.octave;
-
-  const pitchIndex = notes.indexOf(noteName);
-  const correctAnswer = PITCH_NAMES[pitchIndex];
-
-  // Distractors
-  const distractors = PITCH_NAMES.filter(n => n !== correctAnswer);
-  const selectedDistractors = shuffleArray(distractors).slice(0, 5); 
-  const options = shuffleArray([correctAnswer, ...selectedDistractors]);
-
-  let duration: NoteDuration = 'whole';
-  if (difficulty === 'advanced') {
-    const durations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth'];
-    duration = durations[Math.floor(Math.random() * durations.length)];
-  }
-
-  return {
-    id: `q-${index}`,
-    type: QuestionType.PITCH,
-    questionText: `この音符の音階は？ (${clef === 'treble' ? 'ト音記号' : 'ヘ音記号'})`,
-    renderData: {
-      clef: clef,
-      note: {
-        pitch: `${noteName}${octave}`,
-        duration: duration
-      }
-    },
-    options,
-    correctAnswer
-  };
-};
-
-const generateDurationQuestion = (index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
-  const durations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second'];
-  
-  const targetDuration = pickWeightedItem(
-    durations,
-    (d) => DURATION_NAMES[d],
-    stats,
-    isAdaptive,
-    lastAnswer
-  );
-  
-  const correctAnswer = DURATION_NAMES[targetDuration];
-  
-  const allOptions = Object.values(DURATION_NAMES);
-  const distractors = allOptions.filter(d => d !== correctAnswer);
-  const selectedDistractors = shuffleArray(distractors).slice(0, 5);
-  const options = shuffleArray([correctAnswer, ...selectedDistractors]);
-
-  return {
-    id: `q-${index}`,
-    type: QuestionType.DURATION,
-    questionText: 'この音符の種類は？',
-    renderData: {
-      clef: 'treble',
-      note: {
-        pitch: 'B4', 
-        duration: targetDuration
-      }
-    },
-    options,
-    correctAnswer
-  };
-};
-
-const generateSymbolQuestion = (index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
-  const targetSymbol = pickWeightedItem(
-    MUSICAL_SYMBOLS,
-    (s) => s.answer,
-    stats,
-    isAdaptive,
-    lastAnswer
-  );
-  
-  const correctAnswer = targetSymbol.answer;
-  
-  const allAnswers = MUSICAL_SYMBOLS.map(s => s.answer);
-  const distractors = allAnswers.filter(a => a !== correctAnswer);
-  const selectedDistractors = shuffleArray(distractors).slice(0, 5);
-  const options = shuffleArray([correctAnswer, ...selectedDistractors]);
-
-  return {
-    id: `q-${index}`,
-    type: QuestionType.SYMBOL,
-    questionText: 'この記号の意味は？',
-    renderData: {
-      symbol: {
-        type: targetSymbol.type as 'text' | 'shape',
-        value: targetSymbol.value
-      }
-    },
-    options,
-    correctAnswer
-  };
-};
+}
 
 export const generateQuiz = (difficulty: Difficulty, isAdaptive: boolean, stats: Record<string, ItemStats>): Question[] => {
   const questions: Question[] = [];
   let lastAnswer: string | undefined = undefined;
   
+  const allNotes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+
   for (let i = 0; i < 10; i++) {
-    let q: Question;
-    if (difficulty === 'beginner' || difficulty === 'intermediate') {
-      q = generatePitchQuestion(difficulty, i, stats, isAdaptive, lastAnswer);
-    } else {
-      const roll = Math.random();
-      if (roll < 0.4) {
-        q = generatePitchQuestion('advanced', i, stats, isAdaptive, lastAnswer);
-      } else if (roll < 0.7) {
-        q = generateDurationQuestion(i, stats, isAdaptive, lastAnswer);
-      } else {
-        q = generateSymbolQuestion(i, stats, isAdaptive, lastAnswer);
-      }
+    let q: Question | null = null;
+
+    switch (difficulty) {
+        // --- BEGINNER ---
+        case 'beginner-1': 
+            // Basic Pitch: Treble, Whole notes, C4-C5 (Middle)
+            q = createNoteQuestion(i, 'treble', allNotes, 4, 5, ['whole'], stats, isAdaptive, lastAnswer);
+            break;
+        case 'beginner-2':
+            // High Pitch: Treble, Whole notes, C5-A5 (High)
+            q = createNoteQuestion(i, 'treble', allNotes, 5, 5, ['whole'], stats, isAdaptive, lastAnswer);
+            break;
+        case 'beginner-3':
+            // Low Pitch: Bass, Whole notes, C2-C3
+            q = createNoteQuestion(i, 'bass', allNotes, 2, 3, ['whole'], stats, isAdaptive, lastAnswer);
+            break;
+
+        // --- INTERMEDIATE ---
+        case 'intermediate-1':
+            // Mixed Clefs, Basic Durations (Whole, Half, Quarter)
+            // Randomly pick Pitch or Duration question
+            {
+                const isDuration = Math.random() > 0.5;
+                const clef = Math.random() > 0.5 ? 'treble' : 'bass';
+                const octMin = clef === 'treble' ? 4 : 2;
+                const octMax = clef === 'treble' ? 5 : 3;
+                q = createNoteQuestion(i, clef, allNotes, octMin, octMax, ['whole', 'half', 'quarter'], stats, isAdaptive, lastAnswer, isDuration);
+            }
+            break;
+        case 'intermediate-2':
+            // Add 8th Notes (Flagged)
+            {
+                const clef = 'treble';
+                // Mostly Duration questions focusing on flags? Or mixed? Let's do mixed.
+                // But prioritize showing the new note types.
+                const isDuration = Math.random() > 0.3; 
+                q = createNoteQuestion(i, clef, allNotes, 4, 5, ['quarter', 'eighth'], stats, isAdaptive, lastAnswer, isDuration);
+            }
+            break;
+        case 'intermediate-3':
+            // Add 16th, 32nd Notes
+             {
+                const clef = 'treble';
+                const isDuration = true; // Hard to read pitch with many flags? Let's stick to duration focus for learning symbols.
+                q = createNoteQuestion(i, clef, ['B'], 4, 4, ['eighth', 'sixteenth', 'thirty-second'], stats, isAdaptive, lastAnswer, true);
+            }
+            break;
+
+        // --- ADVANCED ---
+        case 'advanced-1':
+            // Performance / Dynamics (Piano/Flute style)
+            q = createSymbolQuestion(i, ['dynamics'], stats, isAdaptive, lastAnswer);
+            break;
+        case 'advanced-2':
+            // Theory / Structure (Accidentals, Clefs, Ties)
+            q = createSymbolQuestion(i, ['accidentals', 'structure'], stats, isAdaptive, lastAnswer);
+            break;
+        case 'advanced-3':
+            // Rhythm / Rests
+            q = createSymbolQuestion(i, ['rests'], stats, isAdaptive, lastAnswer);
+            break;
     }
-    questions.push(q);
-    lastAnswer = q.correctAnswer;
+
+    if (q) {
+        questions.push(q);
+        lastAnswer = q.correctAnswer;
+    }
   }
   
   return questions;

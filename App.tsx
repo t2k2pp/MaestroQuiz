@@ -4,13 +4,13 @@ import { generateQuiz } from './services/questionGenerator';
 import { loadData, updateStats, clearData, getItemStats } from './services/storage';
 import { Staff } from './components/Staff';
 import confetti from 'canvas-confetti';
-import { Music, Award, RotateCcw, CheckCircle2, XCircle, AlertCircle, BookOpen, Volume2, VolumeX, BrainCircuit, BarChart3, Trash2, Settings } from 'lucide-react';
+import { Music, Award, RotateCcw, CheckCircle2, XCircle, AlertCircle, BookOpen, Volume2, VolumeX, BrainCircuit, BarChart3, Trash2, Settings, ChevronRight } from 'lucide-react';
 import { MUSICAL_SYMBOLS, DURATION_NAMES, PITCH_NAMES } from './constants';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
     status: 'menu',
-    difficulty: 'beginner',
+    difficulty: 'beginner-1',
     currentQuestionIndex: 0,
     score: 0,
     questions: [],
@@ -28,7 +28,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      // Filter for Japanese voices preferably, or just all
       const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
       setAvailableVoices(jaVoices.length > 0 ? jaVoices : voices);
     };
@@ -39,7 +38,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Helper to map pitch codes (C4) to Japanese names for Reference
   const getPitchLabel = (pitch: string) => {
       const noteLetter = pitch.charAt(0);
       const index = ['C', 'D', 'E', 'F', 'G', 'A', 'B'].indexOf(noteLetter);
@@ -48,23 +46,15 @@ const App: React.FC = () => {
 
   const playVoice = (text: string) => {
     if (!gameState.isSoundEnabled || !window.speechSynthesis) return;
-    
-    // Cancel previous
     window.speechSynthesis.cancel();
-    
-    // Clean text
     const cleanText = text.replace(/\s*\(.*?\)/g, '');
-    
     const uttr = new SpeechSynthesisUtterance(cleanText);
     uttr.lang = 'ja-JP';
     uttr.rate = 1.0;
-
-    // Use selected voice if available
     if (gameState.selectedVoiceURI) {
         const voice = availableVoices.find(v => v.voiceURI === gameState.selectedVoiceURI);
         if (voice) uttr.voice = voice;
     }
-    
     window.speechSynthesis.speak(uttr);
   };
 
@@ -90,13 +80,11 @@ const App: React.FC = () => {
     const currentQ = gameState.questions[gameState.currentQuestionIndex];
     const isCorrect = option === currentQ.correctAnswer;
     
-    // Update persistent stats
     updateStats(currentQ.correctAnswer, isCorrect);
 
     setSelectedOption(option);
     setFeedback(isCorrect ? 'correct' : 'incorrect');
 
-    // Play voice ALWAYS (Correct or Incorrect)
     playVoice(currentQ.correctAnswer);
 
     if (isCorrect) {
@@ -138,7 +126,6 @@ const App: React.FC = () => {
         history: [...prev.history, lastHistoryEntry]
     }));
     if (lastCorrect) {
-        // Voice is already played in handleAnswer
         confetti({ particleCount: 150, spread: 100 });
     }
   };
@@ -147,105 +134,125 @@ const App: React.FC = () => {
       if (confirm('本当にすべての成績データを消去しますか？\n（この操作は取り消せません）')) {
           clearData();
           alert('データを消去しました。');
-          // Force re-render of stats if currently viewing stats
           setGameState(prev => ({ ...prev })); 
       }
   };
 
-  const renderMenu = () => (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 p-6 text-white">
-      <div className="mb-6 text-center animate-fade-in-down">
-        <Music className="w-20 h-20 mx-auto mb-4 text-pink-400" />
-        <h1 className="text-5xl font-extrabold mb-2 tracking-tight">Maestro Quiz</h1>
-        <p className="text-indigo-200 text-lg">音楽の知識をテストしよう！</p>
-      </div>
-
-      {/* Settings Panel */}
-      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-8 w-full max-w-2xl border border-white/20">
-         <h3 className="text-sm font-bold text-indigo-200 mb-4 flex items-center gap-2">
-             <Settings size={16} /> 設定
-         </h3>
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             {/* Sound Toggle */}
-            <button 
-                onClick={() => setGameState(prev => ({ ...prev, isSoundEnabled: !prev.isSoundEnabled }))}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all border ${gameState.isSoundEnabled ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800/50 border-slate-600 text-slate-400'}`}
-            >
-                <div className="flex items-center gap-2">
-                    {gameState.isSoundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                    <span>読み上げ</span>
-                </div>
-                <div className={`w-10 h-6 rounded-full relative transition-colors ${gameState.isSoundEnabled ? 'bg-green-400' : 'bg-slate-600'}`}>
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${gameState.isSoundEnabled ? 'left-5' : 'left-1'}`} />
-                </div>
-            </button>
-
-            {/* Adaptive Toggle */}
-            <button 
-                onClick={() => setGameState(prev => ({ ...prev, isAdaptiveMode: !prev.isAdaptiveMode }))}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all border ${gameState.isAdaptiveMode ? 'bg-pink-600 border-pink-500 text-white' : 'bg-slate-800/50 border-slate-600 text-slate-400'}`}
-            >
-                <div className="flex items-center gap-2">
-                    <BrainCircuit size={20} />
-                    <span>苦手克服モード</span>
-                </div>
-                <div className={`w-10 h-6 rounded-full relative transition-colors ${gameState.isAdaptiveMode ? 'bg-green-400' : 'bg-slate-600'}`}>
-                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${gameState.isAdaptiveMode ? 'left-5' : 'left-1'}`} />
-                </div>
-            </button>
-            
-            {/* Voice Select */}
-            <div className="md:col-span-2">
-                <label className="block text-xs text-indigo-200 mb-1 ml-1">読み上げ音声モデル</label>
-                <select 
-                    value={gameState.selectedVoiceURI || ''}
-                    onChange={(e) => setGameState(prev => ({ ...prev, selectedVoiceURI: e.target.value }))}
-                    disabled={!gameState.isSoundEnabled}
-                    className="w-full bg-slate-800/50 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+  // Helper component for Menu Level Card
+  const LevelCard = ({ 
+      title, 
+      color, 
+      icon, 
+      levels 
+  }: { 
+      title: string, 
+      color: string, 
+      icon: React.ReactNode, 
+      levels: { id: Difficulty, label: string, desc: string }[] 
+  }) => (
+    <div className={`bg-white rounded-2xl shadow-xl overflow-hidden border-t-4 ${color}`}>
+        <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+             <div className="p-2 bg-white rounded-lg shadow-sm text-2xl">{icon}</div>
+             <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+        </div>
+        <div className="p-2">
+            {levels.map((lvl) => (
+                <button
+                    key={lvl.id}
+                    onClick={() => startGame(lvl.id)}
+                    className="w-full text-left p-4 hover:bg-slate-50 rounded-xl transition-all group flex items-center justify-between border-b border-slate-100 last:border-0"
                 >
-                    <option value="">デフォルト</option>
-                    {availableVoices.map(v => (
-                        <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
-                    ))}
-                </select>
-            </div>
-         </div>
+                    <div>
+                        <div className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                             {lvl.label}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">{lvl.desc}</div>
+                    </div>
+                    <ChevronRight size={18} className="text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+                </button>
+            ))}
+        </div>
+    </div>
+  );
+
+  const renderMenu = () => (
+    <div className="flex flex-col items-center min-h-screen bg-slate-100 p-6 text-slate-800">
+      <div className="mt-8 mb-8 text-center animate-fade-in-down">
+        <div className="inline-flex p-4 bg-white rounded-full shadow-lg mb-4">
+            <Music className="w-12 h-12 text-indigo-500" />
+        </div>
+        <h1 className="text-4xl font-extrabold mb-2 text-indigo-900 tracking-tight">Maestro Quiz</h1>
+        <p className="text-slate-500">目指せマエストロ！音楽知識クイズ</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
-        {[
-          { id: 'beginner', title: '初級', desc: '基本のドレミ (C4-C5)', color: 'bg-green-500 hover:bg-green-600', icon: '🎵' },
-          { id: 'intermediate', title: '中級', desc: '広い音域・ヘ音記号', color: 'bg-blue-500 hover:bg-blue-600', icon: '🎹' },
-          { id: 'advanced', title: '上級', desc: 'リズム・記号・広音域', color: 'bg-red-500 hover:bg-red-600', icon: '🔥' }
-        ].map((level) => (
-          <button
-            key={level.id}
-            onClick={() => startGame(level.id as Difficulty)}
-            className={`${level.color} rounded-2xl p-6 transition-all transform hover:scale-105 shadow-xl flex flex-col items-center group`}
-          >
-            <span className="text-4xl mb-3 group-hover:animate-bounce">{level.icon}</span>
-            <h2 className="text-2xl font-bold mb-1">{level.title}</h2>
-            <p className="text-sm opacity-90">{level.desc}</p>
-          </button>
-        ))}
-      </div>
-      
-      <div className="flex gap-4">
-        <button 
+      {/* Settings Row */}
+      <div className="flex flex-wrap justify-center gap-4 mb-10 w-full max-w-4xl">
+         <button 
+             onClick={() => setGameState(prev => ({...prev, isSoundEnabled: !prev.isSoundEnabled}))}
+             className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all border ${gameState.isSoundEnabled ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'}`}
+         >
+             {gameState.isSoundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}
+             音声 {gameState.isSoundEnabled ? 'ON' : 'OFF'}
+         </button>
+         
+         <button 
+             onClick={() => setGameState(prev => ({...prev, isAdaptiveMode: !prev.isAdaptiveMode}))}
+             className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all border ${gameState.isAdaptiveMode ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-slate-500 border-slate-200'}`}
+         >
+             <BrainCircuit size={16}/>
+             苦手克服 {gameState.isAdaptiveMode ? 'ON' : 'OFF'}
+         </button>
+
+         <button 
             onClick={() => setGameState(prev => ({...prev, status: 'reference'}))}
-            className="bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-6 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-white text-indigo-600 border border-indigo-100 shadow-sm hover:bg-indigo-50 transition-all"
         >
-            <BookOpen size={20} /> 学習モード
+            <BookOpen size={16} /> 学習・暗記
         </button>
+
         <button 
             onClick={() => setGameState(prev => ({...prev, status: 'stats'}))}
-            className="bg-purple-700 hover:bg-purple-600 text-white py-3 px-6 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-white text-purple-600 border border-purple-100 shadow-sm hover:bg-purple-50 transition-all"
         >
-            <BarChart3 size={20} /> 成績確認
+            <BarChart3 size={16} /> 成績表
         </button>
       </div>
 
-      <div className="mt-12 text-sm text-indigo-300 opacity-60">
+      {/* Stages Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mb-12">
+        <LevelCard 
+            title="初級 (Beginner)" 
+            color="border-green-500" 
+            icon={<span className="text-green-500">🌱</span>}
+            levels={[
+                { id: 'beginner-1', label: 'Step 1: 基本のドレミ', desc: 'ト音記号・全音符・真ん中の音域' },
+                { id: 'beginner-2', label: 'Step 2: 高音に挑戦', desc: 'ト音記号・全音符・高い音域' },
+                { id: 'beginner-3', label: 'Step 3: 低音に挑戦', desc: 'ヘ音記号・全音符・低い音域' },
+            ]}
+        />
+        <LevelCard 
+            title="中級 (Intermediate)" 
+            color="border-blue-500" 
+            icon={<span className="text-blue-500">🎹</span>}
+            levels={[
+                { id: 'intermediate-1', label: 'Step 1: 音符の長さ', desc: '全・2分・4分音符のリズム' },
+                { id: 'intermediate-2', label: 'Step 2: 8分音符', desc: '旗が1つある音符の登場' },
+                { id: 'intermediate-3', label: 'Step 3: 細かいリズム', desc: '16分音符・32分音符の識別' },
+            ]}
+        />
+        <LevelCard 
+            title="上級 (Advanced)" 
+            color="border-red-500" 
+            icon={<span className="text-red-500">🔥</span>}
+            levels={[
+                { id: 'advanced-1', label: 'Step 1: 演奏記号', desc: '強弱記号 (f, p) や表現' },
+                { id: 'advanced-2', label: 'Step 2: 楽典・記号', desc: 'シャープ・フラット・反復記号' },
+                { id: 'advanced-3', label: 'Step 3: 休符マスター', desc: '全休符から8分休符まで' },
+            ]}
+        />
+      </div>
+
+      <div className="text-sm text-slate-400 opacity-80">
         © 2026 Maestro Quiz
       </div>
     </div>
@@ -299,38 +306,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Daily Chart */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-                    <h3 className="text-lg font-bold text-slate-700 mb-6">日別学習実績 (直近7日)</h3>
-                    {last7Days.length === 0 ? (
-                        <p className="text-slate-400 text-center py-10">データがまだありません。</p>
-                    ) : (
-                        <div className="flex items-end justify-around h-48 gap-2">
-                            {last7Days.map(date => {
-                                const dayData = data.daily[date];
-                                const rate = dayData.total > 0 ? (dayData.correct / dayData.total) * 100 : 0;
-                                const heightPercent = Math.max(rate, 5); // min height for visibility
-                                return (
-                                    <div key={date} className="flex flex-col items-center w-full group">
-                                         <div className="text-xs font-bold text-slate-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                             {dayData.correct}/{dayData.total}
-                                         </div>
-                                         <div className="w-full max-w-[40px] bg-slate-100 rounded-t-lg relative h-full flex items-end overflow-hidden">
-                                             <div 
-                                                className={`w-full transition-all duration-500 ${rate >= 80 ? 'bg-green-400' : rate >= 50 ? 'bg-indigo-400' : 'bg-orange-400'}`} 
-                                                style={{ height: `${heightPercent}%` }}
-                                             />
-                                         </div>
-                                         <span className="text-[10px] text-slate-400 mt-2 rotate-0 md:rotate-0 whitespace-nowrap">
-                                             {date.substring(5)} {/* MM-DD */}
-                                         </span>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-
                 <div className="text-center">
                     <button 
                         onClick={clearAllData} 
@@ -361,39 +336,38 @@ const App: React.FC = () => {
           {/* Section 1: Notes */}
           <section className="mb-12">
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎵 音階 (ドレミ)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Changed layout: Stack Treble and Bass vertically for more space */}
+            <div className="flex flex-col gap-10">
                <div className="bg-white p-6 rounded-xl shadow-sm">
-                  <h4 className="font-bold text-center mb-4 text-slate-600">ト音記号 (高音・基本)</h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <h4 className="font-bold text-center mb-6 text-slate-600 text-lg">ト音記号 (高音・基本)</h4>
+                  {/* Grid 1 col mobile, 3 cols PC */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                      {['C4', 'E4', 'G4', 'B4', 'D5', 'F5'].map((pitch, i) => (
-                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-2 pb-1 bg-slate-50/50">
-                            {/* Adjusted Layout: Staff is contained, text is immediately below in same card */}
-                            <div className="relative w-full h-20 flex justify-center overflow-hidden">
-                                <div className="absolute top-[-20px] transform scale-[0.6]">
-                                    <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
-                                </div>
+                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-4 bg-slate-50 transition-all hover:shadow-md">
+                            {/* Removed scaling - Full size */}
+                            <div className="w-full h-auto flex items-center justify-center">
+                                <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
                             </div>
-                            <div className="text-center mt-[-5px]">
-                                <div className="font-black text-slate-800 leading-tight">{pitch}</div>
-                                <div className="text-xs font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
+                            <div className="text-center mt-2 pb-2">
+                                <div className="font-black text-2xl text-slate-800">{pitch}</div>
+                                <div className="text-base font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
                             </div>
                         </div>
                      ))}
                   </div>
                </div>
+               
                <div className="bg-white p-6 rounded-xl shadow-sm">
-                  <h4 className="font-bold text-center mb-4 text-slate-600">ヘ音記号 (低音)</h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <h4 className="font-bold text-center mb-6 text-slate-600 text-lg">ヘ音記号 (低音)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                      {['C2', 'E2', 'G2', 'B2', 'C3', 'E3'].map((pitch, i) => (
-                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-2 pb-1 bg-slate-50/50">
-                            <div className="relative w-full h-20 flex justify-center overflow-hidden">
-                                <div className="absolute top-[-20px] transform scale-[0.6]">
-                                    <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
-                                </div>
+                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-4 bg-slate-50 transition-all hover:shadow-md">
+                            <div className="w-full h-auto flex items-center justify-center">
+                                <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
                             </div>
-                            <div className="text-center mt-[-5px]">
-                                <div className="font-black text-slate-800 leading-tight">{pitch}</div>
-                                <div className="text-xs font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
+                            <div className="text-center mt-2 pb-2">
+                                <div className="font-black text-2xl text-slate-800">{pitch}</div>
+                                <div className="text-base font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
                             </div>
                         </div>
                      ))}
@@ -405,15 +379,13 @@ const App: React.FC = () => {
           {/* Section 2: Durations */}
           <section className="mb-12">
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">⏱️ 音符の種類・長さ</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {Object.keys(DURATION_NAMES).map((key) => (
-                    <div key={key} className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="relative w-full h-20 flex justify-center overflow-hidden">
-                             <div className="absolute top-[-20px] transform scale-[0.55]">
-                                <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
-                             </div>
+                    <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center transition-all hover:shadow-md">
+                        <div className="w-full h-auto flex items-center justify-center">
+                            <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
                         </div>
-                        <span className="font-bold text-sm text-slate-700 mt-[-5px]">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
+                        <span className="font-bold text-lg text-slate-700 mt-4">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
                     </div>
                 ))}
             </div>
@@ -422,15 +394,13 @@ const App: React.FC = () => {
            {/* Section 3: Symbols */}
            <section className="mb-12">
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎼 記号・休符</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {MUSICAL_SYMBOLS.map((sym, i) => (
-                    <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                         <div className="relative w-full h-24 flex justify-center overflow-hidden">
-                             <div className="absolute top-[-20px] transform scale-[0.55]">
-                                <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
-                             </div>
+                    <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center transition-all hover:shadow-md">
+                         <div className="w-full h-auto flex items-center justify-center">
+                             <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
                         </div>
-                        <span className="font-bold text-xs text-slate-700 mt-[-5px] leading-tight px-1 pb-1">{sym.answer}</span>
+                        <span className="font-bold text-base text-slate-700 mt-4 leading-tight px-2">{sym.answer}</span>
                     </div>
                 ))}
             </div>
@@ -452,7 +422,7 @@ const App: React.FC = () => {
           </button>
           <div className="flex flex-col items-center">
              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                {gameState.difficulty.toUpperCase()} 
+                {gameState.difficulty.replace('-', ' ').toUpperCase()} 
                 {gameState.isAdaptiveMode && <BrainCircuit size={14} className="text-pink-500"/>}
              </span>
              <div className="flex gap-1 mt-1">
