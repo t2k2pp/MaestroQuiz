@@ -336,17 +336,21 @@ const App: React.FC = () => {
           {/* Section 1: Notes */}
           <section className="mb-12">
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎵 音階 (ドレミ)</h3>
-            {/* Changed layout: Stack Treble and Bass vertically for more space */}
+            
             <div className="flex flex-col gap-10">
+               {/* Treble Clef */}
                <div className="bg-white p-6 rounded-xl shadow-sm">
                   <h4 className="font-bold text-center mb-6 text-slate-600 text-lg">ト音記号 (高音・基本)</h4>
                   {/* Grid 1 col mobile, 3 cols PC */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                     {['C4', 'E4', 'G4', 'B4', 'D5', 'F5'].map((pitch, i) => (
+                     {['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5', 'D5', 'E5', 'F5', 'G5'].map((pitch, i) => (
                         <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-4 bg-slate-50 transition-all hover:shadow-md">
-                            {/* Removed scaling - Full size */}
-                            <div className="w-full h-auto flex items-center justify-center">
-                                <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
+                            <div className="flex items-center justify-center">
+                                {/* Use width 130 and whole notes */}
+                                <Staff 
+                                    width={130}
+                                    data={{ clef: 'treble', note: { pitch, duration: 'whole' } }} 
+                                />
                             </div>
                             <div className="text-center mt-2 pb-2">
                                 <div className="font-black text-2xl text-slate-800">{pitch}</div>
@@ -357,13 +361,17 @@ const App: React.FC = () => {
                   </div>
                </div>
                
+               {/* Bass Clef */}
                <div className="bg-white p-6 rounded-xl shadow-sm">
                   <h4 className="font-bold text-center mb-6 text-slate-600 text-lg">ヘ音記号 (低音)</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                     {['C2', 'E2', 'G2', 'B2', 'C3', 'E3'].map((pitch, i) => (
+                     {['C2', 'D2', 'E2', 'F2', 'G2', 'A2', 'B2', 'C3', 'D3', 'E3'].map((pitch, i) => (
                         <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-4 bg-slate-50 transition-all hover:shadow-md">
-                            <div className="w-full h-auto flex items-center justify-center">
-                                <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
+                            <div className="flex items-center justify-center">
+                                <Staff 
+                                    width={130}
+                                    data={{ clef: 'bass', note: { pitch, duration: 'whole' } }} 
+                                />
                             </div>
                             <div className="text-center mt-2 pb-2">
                                 <div className="font-black text-2xl text-slate-800">{pitch}</div>
@@ -382,8 +390,8 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {Object.keys(DURATION_NAMES).map((key) => (
                     <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center transition-all hover:shadow-md">
-                        <div className="w-full h-auto flex items-center justify-center">
-                            <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
+                        <div className="flex items-center justify-center">
+                            <Staff width={130} data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
                         </div>
                         <span className="font-bold text-lg text-slate-700 mt-4">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
                     </div>
@@ -397,8 +405,8 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {MUSICAL_SYMBOLS.map((sym, i) => (
                     <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center transition-all hover:shadow-md">
-                         <div className="w-full h-auto flex items-center justify-center">
-                             <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
+                         <div className="flex items-center justify-center">
+                             <Staff width={130} data={{ symbol: { type: sym.type as any, value: sym.value } }} />
                         </div>
                         <span className="font-bold text-base text-slate-700 mt-4 leading-tight px-2">{sym.answer}</span>
                     </div>
