@@ -1,13 +1,45 @@
-import { Difficulty, Question, QuestionType, NoteDuration, RenderData } from '../types';
+import { Difficulty, Question, QuestionType, NoteDuration, RenderData, ItemStats } from '../types';
 import { PITCH_NAMES, DURATION_NAMES, MUSICAL_SYMBOLS, shuffleArray } from '../constants';
 
-const generatePitchQuestion = (difficulty: Difficulty, index: number): Question => {
-  // Logic:
-  // Beginner: Treble Clef C4 - C5 (No change)
-  // Intermediate/Advanced: Wider range. 
-  //   - If note is low (e.g. < C4), use Bass Clef roughly half the time or if it makes sense.
-  //   - Let's define: High (C4-A5) -> Treble. Low (C2-B3) -> Bass.
+// Helper to pick an item, prioritizing weaknesses if adaptive mode is on
+const pickWeightedItem = <T>(
+  items: T[], 
+  getKey: (item: T) => string, 
+  stats: Record<string, ItemStats>, 
+  isAdaptive: boolean,
+  lastAnswer?: string
+): T => {
+  // Filter out the last answer to prevent immediate repeats
+  let pool = items.filter(item => getKey(item) !== lastAnswer);
   
+  // Fallback if pool is empty (shouldn't happen with large sets, but safe guard)
+  if (pool.length === 0) pool = items;
+
+  if (!isAdaptive) {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Create a weighted pool
+  const weightedPool: T[] = [];
+  
+  pool.forEach(item => {
+    const key = getKey(item);
+    const itemStats = stats[key] || { correct: 0, wrong: 0 };
+    // Weight algorithm: Base 1 + (Wrongs * 3). 
+    // If you got it wrong 2 times, it appears 7 times in the pool.
+    // If you got it correct a lot, we reduce chance slightly, but keep at least 1.
+    
+    // Simple approach: Add (Wrong^2 + 1) copies.
+    const weight = (itemStats.wrong * 2) + 1;
+    for (let i = 0; i < weight; i++) {
+      weightedPool.push(item);
+    }
+  });
+
+  return weightedPool[Math.floor(Math.random() * weightedPool.length)];
+};
+
+const generatePitchQuestion = (difficulty: Difficulty, index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
   let clef: 'treble' | 'bass' = 'treble';
   let minOctave = 4, maxOctave = 5;
 
@@ -16,32 +48,40 @@ const generatePitchQuestion = (difficulty: Difficulty, index: number): Question 
     minOctave = 4;
     maxOctave = 5;
   } else {
-    // 50% chance of Bass Clef for wider range practice
     clef = Math.random() > 0.5 ? 'bass' : 'treble';
-    
     if (clef === 'treble') {
-       minOctave = 4; // C4 to A5
-       maxOctave = 5;
+       minOctave = 4; maxOctave = 5;
     } else {
-       minOctave = 2; // C2 to E4
-       maxOctave = 3;
+       minOctave = 2; maxOctave = 3;
     }
   }
 
   const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
   
-  // Randomly select a note
-  let octave = Math.floor(Math.random() * (maxOctave - minOctave + 1)) + minOctave;
-  let noteName = notes[Math.floor(Math.random() * notes.length)];
-  
-  // Constrain limits
-  if (difficulty === 'beginner') {
-    // Force C4-C5 range strictly
-    if (octave === 5 && noteName !== 'C') octave = 4;
-    if (octave === 4 && noteName === 'C') octave = 4; // ok
+  // Create all possible note combinations for this setting to pick from
+  const candidates: {note: string, octave: number}[] = [];
+  for (let o = minOctave; o <= maxOctave; o++) {
+    for (const n of notes) {
+        if (difficulty === 'beginner') {
+            if (o === 5 && n !== 'C') continue;
+            if (o === 4 && n === 'C' && Math.random() > 0.1) continue; // Small bias to avoid too many Middle Cs if random
+        }
+        candidates.push({ note: n, octave: o });
+    }
   }
 
-  // Pitch Label (Correct Answer)
+  // Pick one using weighted logic
+  const selection = pickWeightedItem(
+    candidates, 
+    (c) => PITCH_NAMES[notes.indexOf(c.note)], // Key is the Answer Text
+    stats, 
+    isAdaptive,
+    lastAnswer
+  );
+
+  const noteName = selection.note;
+  const octave = selection.octave;
+
   const pitchIndex = notes.indexOf(noteName);
   const correctAnswer = PITCH_NAMES[pitchIndex];
 
@@ -50,7 +90,6 @@ const generatePitchQuestion = (difficulty: Difficulty, index: number): Question 
   const selectedDistractors = shuffleArray(distractors).slice(0, 5); 
   const options = shuffleArray([correctAnswer, ...selectedDistractors]);
 
-  // Note Duration
   let duration: NoteDuration = 'whole';
   if (difficulty === 'advanced') {
     const durations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth'];
@@ -73,13 +112,19 @@ const generatePitchQuestion = (difficulty: Difficulty, index: number): Question 
   };
 };
 
-const generateDurationQuestion = (index: number): Question => {
+const generateDurationQuestion = (index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
   const durations: NoteDuration[] = ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'thirty-second'];
-  const targetDuration = durations[Math.floor(Math.random() * durations.length)];
+  
+  const targetDuration = pickWeightedItem(
+    durations,
+    (d) => DURATION_NAMES[d],
+    stats,
+    isAdaptive,
+    lastAnswer
+  );
   
   const correctAnswer = DURATION_NAMES[targetDuration];
   
-  // Distractors
   const allOptions = Object.values(DURATION_NAMES);
   const distractors = allOptions.filter(d => d !== correctAnswer);
   const selectedDistractors = shuffleArray(distractors).slice(0, 5);
@@ -101,12 +146,17 @@ const generateDurationQuestion = (index: number): Question => {
   };
 };
 
-const generateSymbolQuestion = (index: number): Question => {
-  const targetSymbol = MUSICAL_SYMBOLS[Math.floor(Math.random() * MUSICAL_SYMBOLS.length)];
+const generateSymbolQuestion = (index: number, stats: Record<string, ItemStats>, isAdaptive: boolean, lastAnswer?: string): Question => {
+  const targetSymbol = pickWeightedItem(
+    MUSICAL_SYMBOLS,
+    (s) => s.answer,
+    stats,
+    isAdaptive,
+    lastAnswer
+  );
   
   const correctAnswer = targetSymbol.answer;
   
-  // Distractors
   const allAnswers = MUSICAL_SYMBOLS.map(s => s.answer);
   const distractors = allAnswers.filter(a => a !== correctAnswer);
   const selectedDistractors = shuffleArray(distractors).slice(0, 5);
@@ -127,23 +177,26 @@ const generateSymbolQuestion = (index: number): Question => {
   };
 };
 
-export const generateQuiz = (difficulty: Difficulty): Question[] => {
+export const generateQuiz = (difficulty: Difficulty, isAdaptive: boolean, stats: Record<string, ItemStats>): Question[] => {
   const questions: Question[] = [];
+  let lastAnswer: string | undefined = undefined;
   
   for (let i = 0; i < 10; i++) {
+    let q: Question;
     if (difficulty === 'beginner' || difficulty === 'intermediate') {
-      questions.push(generatePitchQuestion(difficulty, i));
+      q = generatePitchQuestion(difficulty, i, stats, isAdaptive, lastAnswer);
     } else {
-      // Advanced: Mix
       const roll = Math.random();
       if (roll < 0.4) {
-        questions.push(generatePitchQuestion('advanced', i));
+        q = generatePitchQuestion('advanced', i, stats, isAdaptive, lastAnswer);
       } else if (roll < 0.7) {
-        questions.push(generateDurationQuestion(i));
+        q = generateDurationQuestion(i, stats, isAdaptive, lastAnswer);
       } else {
-        questions.push(generateSymbolQuestion(i));
+        q = generateSymbolQuestion(i, stats, isAdaptive, lastAnswer);
       }
     }
+    questions.push(q);
+    lastAnswer = q.correctAnswer;
   }
   
   return questions;

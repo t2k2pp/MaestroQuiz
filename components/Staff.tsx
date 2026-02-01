@@ -30,20 +30,12 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
     // Calculate Y position based on Clef
     let noteY = 0;
     if (clef === 'treble') {
-        // Treble: E4 (Bottom Line) is Step 2.
-        // E4 Y = 180.
-        // Y = 180 - (steps - 2) * 10
         noteY = 180 - (stepsFromC4 - 2) * 10;
     } else {
-        // Bass: G2 (Bottom Line) is Step -10.
-        // G2 Y = 180.
-        // Y = 180 - (steps - (-10)) * 10 => 180 - (steps + 10) * 10
         noteY = 180 - (stepsFromC4 + 10) * 10;
     }
 
     // Stem direction logic
-    // Treble Center Line: B4 (Step 6).
-    // Bass Center Line: D3 (Step -6).
     const centerStep = clef === 'treble' ? 6 : -6;
     const stemDirection = stepsFromC4 >= centerStep ? 'down' : 'up';
     
@@ -51,34 +43,25 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
     const noteColor = "black";
     
     // Stem coordinates
-    // Stem Up: Right of head
-    // Stem Down: Left of head
     const stemX = stemDirection === 'up' ? 164 : 136;
     const stemStartY = noteY + (stemDirection === 'up' ? -5 : 5);
     const stemEndY = noteY + (stemDirection === 'up' ? -stemHeight : stemHeight);
 
     // Ledger Lines
     const ledgerLines = [];
-    // Calculate staff bounds in Y
     const staffTop = 100;
     const staffBottom = 180;
 
-    // Note above staff? (Y < 100) - Draw lines at 80, 60...
     if (noteY < staffTop) {
         for (let y = staffTop - 20; y >= noteY; y -= 20) {
             ledgerLines.push(y);
         }
     }
-    // Note below staff? (Y > 180) - Draw lines at 200, 220...
     if (noteY > staffBottom) {
         for (let y = staffBottom + 20; y <= noteY; y += 20) {
             ledgerLines.push(y);
         }
     }
-
-    // C4 line for specific context (Middle C)
-    // In Treble: C4 is 190 (one line below).
-    // In Bass: C4 is 90 (one line above).
     
     return (
       <g>
@@ -107,42 +90,43 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
             x2={stemX} 
             y2={stemEndY} 
             stroke={noteColor} 
-            strokeWidth="2" 
+            strokeWidth="3" 
+            strokeLinecap="round"
           />
         )}
 
-        {/* Flags - Always on the RIGHT side of the stem */}
+        {/* Flags - Updated to be STROKE based (Line-like) instead of Filled Shapes */}
         {noteData.duration !== 'whole' && noteData.duration !== 'half' && noteData.duration !== 'quarter' && (
-            <g fill={noteColor}>
+            <g fill="none" stroke={noteColor} strokeWidth="4" strokeLinecap="round">
                 {stemDirection === 'up' && (
                     <>
-                        {/* 8th Note Flag (Stem Up) - Curving Down */}
-                         <path d={`M ${stemX} ${stemEndY} C ${stemX} ${stemEndY} ${stemX + 18} ${stemEndY + 10} ${stemX + 18} ${stemEndY + 35} C ${stemX + 18} ${stemEndY + 45} ${stemX + 5} ${stemEndY + 35} ${stemX} ${stemEndY + 50} Z`} />
+                        {/* 8th Note Flag (Stem Up) */}
+                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 18} ${stemEndY + 25} ${stemX} ${stemEndY + 45}`} />
 
                         {/* 16th Note Flag */}
                         {(noteData.duration === 'sixteenth' || noteData.duration === 'thirty-second') && (
-                             <path d={`M ${stemX} ${stemEndY + 15} C ${stemX} ${stemEndY + 15} ${stemX + 18} ${stemEndY + 25} ${stemX + 18} ${stemEndY + 50} C ${stemX + 18} ${stemEndY + 60} ${stemX + 5} ${stemEndY + 50} ${stemX} ${stemEndY + 65} Z`} />
+                             <path d={`M ${stemX} ${stemEndY + 15} Q ${stemX + 18} ${stemEndY + 40} ${stemX} ${stemEndY + 60}`} />
                         )}
 
                         {/* 32nd Note Flag */}
                         {noteData.duration === 'thirty-second' && (
-                             <path d={`M ${stemX} ${stemEndY + 30} C ${stemX} ${stemEndY + 30} ${stemX + 18} ${stemEndY + 40} ${stemX + 18} ${stemEndY + 65} C ${stemX + 18} ${stemEndY + 75} ${stemX + 5} ${stemEndY + 65} ${stemX} ${stemEndY + 80} Z`} />
+                             <path d={`M ${stemX} ${stemEndY + 30} Q ${stemX + 18} ${stemEndY + 55} ${stemX} ${stemEndY + 75}`} />
                         )}
                     </>
                 )}
                 {stemDirection === 'down' && (
                     <>
-                        {/* 8th Note Flag (Stem Down) - Curving Up, attached to Right side */}
-                         <path d={`M ${stemX} ${stemEndY} C ${stemX} ${stemEndY} ${stemX + 18} ${stemEndY - 10} ${stemX + 18} ${stemEndY - 35} C ${stemX + 18} ${stemEndY - 45} ${stemX + 5} ${stemEndY - 35} ${stemX} ${stemEndY - 50} Z`} />
+                        {/* 8th Note Flag (Stem Down) */}
+                         <path d={`M ${stemX} ${stemEndY} Q ${stemX + 18} ${stemEndY - 25} ${stemX} ${stemEndY - 45}`} />
 
                         {/* 16th Note Flag */}
                         {(noteData.duration === 'sixteenth' || noteData.duration === 'thirty-second') && (
-                             <path d={`M ${stemX} ${stemEndY - 15} C ${stemX} ${stemEndY - 15} ${stemX + 18} ${stemEndY - 25} ${stemX + 18} ${stemEndY - 50} C ${stemX + 18} ${stemEndY - 60} ${stemX + 5} ${stemEndY - 50} ${stemX} ${stemEndY - 65} Z`} />
+                             <path d={`M ${stemX} ${stemEndY - 15} Q ${stemX + 18} ${stemEndY - 40} ${stemX} ${stemEndY - 60}`} />
                         )}
 
                         {/* 32nd Note Flag */}
                          {noteData.duration === 'thirty-second' && (
-                             <path d={`M ${stemX} ${stemEndY - 30} C ${stemX} ${stemEndY - 30} ${stemX + 18} ${stemEndY - 40} ${stemX + 18} ${stemEndY - 65} C ${stemX + 18} ${stemEndY - 75} ${stemX + 5} ${stemEndY - 65} ${stemX} ${stemEndY - 80} Z`} />
+                             <path d={`M ${stemX} ${stemEndY - 30} Q ${stemX + 18} ${stemEndY - 55} ${stemX} ${stemEndY - 75}`} />
                         )}
                     </>
                 )}
@@ -203,11 +187,9 @@ export const Staff: React.FC<StaffProps> = ({ data, className, scale = 1 }) => {
         
         // --- RESTS ---
         case 'whole_rest':
-            // Rectangle hanging from the 2nd line (y=120)
             return <rect x="140" y="120" width="20" height="10" fill="black" />;
             
         case 'half_rest':
-            // Rectangle sitting on the 3rd line (y=140)
             return <rect x="140" y="130" width="20" height="10" fill="black" />;
             
         case 'quarter_rest':

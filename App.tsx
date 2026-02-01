@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { GameState, Difficulty } from './types';
+import React, { useState, useEffect } from 'react';
+import { GameState, Difficulty, UserStorageData } from './types';
 import { generateQuiz } from './services/questionGenerator';
+import { loadData, updateStats, clearData, getItemStats } from './services/storage';
 import { Staff } from './components/Staff';
 import confetti from 'canvas-confetti';
-import { Music, Award, RotateCcw, CheckCircle2, XCircle, AlertCircle, BookOpen } from 'lucide-react';
-import { MUSICAL_SYMBOLS, DURATION_NAMES } from './constants';
+import { Music, Award, RotateCcw, CheckCircle2, XCircle, AlertCircle, BookOpen, Volume2, VolumeX, BrainCircuit, BarChart3, Trash2, Settings } from 'lucide-react';
+import { MUSICAL_SYMBOLS, DURATION_NAMES, PITCH_NAMES } from './constants';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
@@ -13,22 +14,72 @@ const App: React.FC = () => {
     currentQuestionIndex: 0,
     score: 0,
     questions: [],
-    history: []
+    history: [],
+    isSoundEnabled: true,
+    selectedVoiceURI: null,
+    isAdaptiveMode: false,
   });
   
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Load voices on mount
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      // Filter for Japanese voices preferably, or just all
+      const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+      setAvailableVoices(jaVoices.length > 0 ? jaVoices : voices);
+    };
+
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  // Helper to map pitch codes (C4) to Japanese names for Reference
+  const getPitchLabel = (pitch: string) => {
+      const noteLetter = pitch.charAt(0);
+      const index = ['C', 'D', 'E', 'F', 'G', 'A', 'B'].indexOf(noteLetter);
+      return PITCH_NAMES[index] || pitch;
+  };
+
+  const playVoice = (text: string) => {
+    if (!gameState.isSoundEnabled || !window.speechSynthesis) return;
+    
+    // Cancel previous
+    window.speechSynthesis.cancel();
+    
+    // Clean text
+    const cleanText = text.replace(/\s*\(.*?\)/g, '');
+    
+    const uttr = new SpeechSynthesisUtterance(cleanText);
+    uttr.lang = 'ja-JP';
+    uttr.rate = 1.0;
+
+    // Use selected voice if available
+    if (gameState.selectedVoiceURI) {
+        const voice = availableVoices.find(v => v.voiceURI === gameState.selectedVoiceURI);
+        if (voice) uttr.voice = voice;
+    }
+    
+    window.speechSynthesis.speak(uttr);
+  };
 
   const startGame = (difficulty: Difficulty) => {
-    const questions = generateQuiz(difficulty);
-    setGameState({
+    const itemStats = getItemStats();
+    const questions = generateQuiz(difficulty, gameState.isAdaptiveMode, itemStats);
+    setGameState(prev => ({
+      ...prev,
       status: 'playing',
       difficulty,
       currentQuestionIndex: 0,
       score: 0,
       questions,
       history: []
-    });
+    }));
     setSelectedOption(null);
     setFeedback(null);
   };
@@ -39,8 +90,14 @@ const App: React.FC = () => {
     const currentQ = gameState.questions[gameState.currentQuestionIndex];
     const isCorrect = option === currentQ.correctAnswer;
     
+    // Update persistent stats
+    updateStats(currentQ.correctAnswer, isCorrect);
+
     setSelectedOption(option);
     setFeedback(isCorrect ? 'correct' : 'incorrect');
+
+    // Play voice ALWAYS (Correct or Incorrect)
+    playVoice(currentQ.correctAnswer);
 
     if (isCorrect) {
       confetti({
@@ -80,15 +137,79 @@ const App: React.FC = () => {
         status: 'result',
         history: [...prev.history, lastHistoryEntry]
     }));
-    if (lastCorrect) confetti({ particleCount: 150, spread: 100 });
+    if (lastCorrect) {
+        // Voice is already played in handleAnswer
+        confetti({ particleCount: 150, spread: 100 });
+    }
+  };
+
+  const clearAllData = () => {
+      if (confirm('本当にすべての成績データを消去しますか？\n（この操作は取り消せません）')) {
+          clearData();
+          alert('データを消去しました。');
+          // Force re-render of stats if currently viewing stats
+          setGameState(prev => ({ ...prev })); 
+      }
   };
 
   const renderMenu = () => (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 p-6 text-white">
-      <div className="mb-10 text-center animate-fade-in-down">
+      <div className="mb-6 text-center animate-fade-in-down">
         <Music className="w-20 h-20 mx-auto mb-4 text-pink-400" />
         <h1 className="text-5xl font-extrabold mb-2 tracking-tight">Maestro Quiz</h1>
         <p className="text-indigo-200 text-lg">音楽の知識をテストしよう！</p>
+      </div>
+
+      {/* Settings Panel */}
+      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-8 w-full max-w-2xl border border-white/20">
+         <h3 className="text-sm font-bold text-indigo-200 mb-4 flex items-center gap-2">
+             <Settings size={16} /> 設定
+         </h3>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             {/* Sound Toggle */}
+            <button 
+                onClick={() => setGameState(prev => ({ ...prev, isSoundEnabled: !prev.isSoundEnabled }))}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all border ${gameState.isSoundEnabled ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800/50 border-slate-600 text-slate-400'}`}
+            >
+                <div className="flex items-center gap-2">
+                    {gameState.isSoundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                    <span>読み上げ</span>
+                </div>
+                <div className={`w-10 h-6 rounded-full relative transition-colors ${gameState.isSoundEnabled ? 'bg-green-400' : 'bg-slate-600'}`}>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${gameState.isSoundEnabled ? 'left-5' : 'left-1'}`} />
+                </div>
+            </button>
+
+            {/* Adaptive Toggle */}
+            <button 
+                onClick={() => setGameState(prev => ({ ...prev, isAdaptiveMode: !prev.isAdaptiveMode }))}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all border ${gameState.isAdaptiveMode ? 'bg-pink-600 border-pink-500 text-white' : 'bg-slate-800/50 border-slate-600 text-slate-400'}`}
+            >
+                <div className="flex items-center gap-2">
+                    <BrainCircuit size={20} />
+                    <span>苦手克服モード</span>
+                </div>
+                <div className={`w-10 h-6 rounded-full relative transition-colors ${gameState.isAdaptiveMode ? 'bg-green-400' : 'bg-slate-600'}`}>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${gameState.isAdaptiveMode ? 'left-5' : 'left-1'}`} />
+                </div>
+            </button>
+            
+            {/* Voice Select */}
+            <div className="md:col-span-2">
+                <label className="block text-xs text-indigo-200 mb-1 ml-1">読み上げ音声モデル</label>
+                <select 
+                    value={gameState.selectedVoiceURI || ''}
+                    onChange={(e) => setGameState(prev => ({ ...prev, selectedVoiceURI: e.target.value }))}
+                    disabled={!gameState.isSoundEnabled}
+                    className="w-full bg-slate-800/50 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+                >
+                    <option value="">デフォルト</option>
+                    {availableVoices.map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
+                    ))}
+                </select>
+            </div>
+         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
@@ -100,21 +221,29 @@ const App: React.FC = () => {
           <button
             key={level.id}
             onClick={() => startGame(level.id as Difficulty)}
-            className={`${level.color} rounded-2xl p-8 transition-all transform hover:scale-105 shadow-xl flex flex-col items-center group`}
+            className={`${level.color} rounded-2xl p-6 transition-all transform hover:scale-105 shadow-xl flex flex-col items-center group`}
           >
-            <span className="text-4xl mb-4 group-hover:animate-bounce">{level.icon}</span>
-            <h2 className="text-2xl font-bold mb-2">{level.title}</h2>
+            <span className="text-4xl mb-3 group-hover:animate-bounce">{level.icon}</span>
+            <h2 className="text-2xl font-bold mb-1">{level.title}</h2>
             <p className="text-sm opacity-90">{level.desc}</p>
           </button>
         ))}
       </div>
       
-      <button 
-        onClick={() => setGameState({...gameState, status: 'reference'})}
-        className="bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-8 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
-      >
-        <BookOpen size={20} /> 学習モード (暗記リスト)
-      </button>
+      <div className="flex gap-4">
+        <button 
+            onClick={() => setGameState(prev => ({...prev, status: 'reference'}))}
+            className="bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-6 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
+        >
+            <BookOpen size={20} /> 学習モード
+        </button>
+        <button 
+            onClick={() => setGameState(prev => ({...prev, status: 'stats'}))}
+            className="bg-purple-700 hover:bg-purple-600 text-white py-3 px-6 rounded-full font-bold shadow-lg flex items-center gap-2 transition-all"
+        >
+            <BarChart3 size={20} /> 成績確認
+        </button>
+      </div>
 
       <div className="mt-12 text-sm text-indigo-300 opacity-60">
         © 2026 Maestro Quiz
@@ -122,11 +251,104 @@ const App: React.FC = () => {
     </div>
   );
 
+  const renderStats = () => {
+      const data = loadData();
+      const dailyKeys = Object.keys(data.daily).sort();
+      const last7Days = dailyKeys.slice(-7);
+      
+      let totalCorrect = 0;
+      let totalQuestions = 0;
+      Object.values(data.daily).forEach(d => {
+          totalCorrect += d.correct;
+          totalQuestions += d.total;
+      });
+      const totalRate = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+
+      return (
+        <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center">
+            <div className="w-full max-w-4xl">
+                <button 
+                    onClick={() => setGameState(prev => ({...prev, status: 'menu'}))} 
+                    className="mb-6 text-indigo-600 font-bold flex items-center gap-2 hover:underline"
+                >
+                    &larr; メニューに戻る
+                </button>
+                
+                <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3">
+                    <BarChart3 className="text-purple-600" /> 成績・学習記録
+                </h2>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center">
+                        <span className="text-slate-500 text-sm font-bold mb-2">総回答数</span>
+                        <span className="text-4xl font-black text-slate-800">{totalQuestions} <span className="text-sm font-normal text-slate-400">問</span></span>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center">
+                         <span className="text-slate-500 text-sm font-bold mb-2">通算正答率</span>
+                         <div className="flex items-baseline gap-1">
+                             <span className={`text-4xl font-black ${totalRate >= 80 ? 'text-green-500' : totalRate >= 50 ? 'text-indigo-500' : 'text-orange-500'}`}>
+                                 {totalRate}
+                             </span>
+                             <span className="text-lg font-bold text-slate-400">%</span>
+                         </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center">
+                        <span className="text-slate-500 text-sm font-bold mb-2">継続日数</span>
+                        <span className="text-4xl font-black text-pink-500">{dailyKeys.length} <span className="text-sm font-normal text-slate-400">日</span></span>
+                    </div>
+                </div>
+
+                {/* Daily Chart */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
+                    <h3 className="text-lg font-bold text-slate-700 mb-6">日別学習実績 (直近7日)</h3>
+                    {last7Days.length === 0 ? (
+                        <p className="text-slate-400 text-center py-10">データがまだありません。</p>
+                    ) : (
+                        <div className="flex items-end justify-around h-48 gap-2">
+                            {last7Days.map(date => {
+                                const dayData = data.daily[date];
+                                const rate = dayData.total > 0 ? (dayData.correct / dayData.total) * 100 : 0;
+                                const heightPercent = Math.max(rate, 5); // min height for visibility
+                                return (
+                                    <div key={date} className="flex flex-col items-center w-full group">
+                                         <div className="text-xs font-bold text-slate-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             {dayData.correct}/{dayData.total}
+                                         </div>
+                                         <div className="w-full max-w-[40px] bg-slate-100 rounded-t-lg relative h-full flex items-end overflow-hidden">
+                                             <div 
+                                                className={`w-full transition-all duration-500 ${rate >= 80 ? 'bg-green-400' : rate >= 50 ? 'bg-indigo-400' : 'bg-orange-400'}`} 
+                                                style={{ height: `${heightPercent}%` }}
+                                             />
+                                         </div>
+                                         <span className="text-[10px] text-slate-400 mt-2 rotate-0 md:rotate-0 whitespace-nowrap">
+                                             {date.substring(5)} {/* MM-DD */}
+                                         </span>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="text-center">
+                    <button 
+                        onClick={clearAllData} 
+                        className="text-red-400 hover:text-red-600 text-sm font-bold flex items-center justify-center gap-2 mx-auto transition-colors"
+                    >
+                        <Trash2 size={16} /> 成績データをすべてリセット
+                    </button>
+                </div>
+            </div>
+        </div>
+      );
+  };
+
   const renderReference = () => (
     <div className="min-h-screen bg-slate-50 p-6">
        <div className="max-w-4xl mx-auto">
           <button 
-            onClick={() => setGameState({...gameState, status: 'menu'})} 
+            onClick={() => setGameState(prev => ({...prev, status: 'menu'}))} 
             className="mb-6 text-indigo-600 font-bold flex items-center gap-2 hover:underline"
           >
             &larr; メニューに戻る
@@ -141,27 +363,38 @@ const App: React.FC = () => {
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎵 音階 (ドレミ)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                <div className="bg-white p-6 rounded-xl shadow-sm">
-                  <h4 className="font-bold text-center mb-4">ト音記号 (高音・基本)</h4>
-                  <div className="flex flex-wrap justify-center gap-4">
+                  <h4 className="font-bold text-center mb-4 text-slate-600">ト音記号 (高音・基本)</h4>
+                  <div className="grid grid-cols-3 gap-4">
                      {['C4', 'E4', 'G4', 'B4', 'D5', 'F5'].map((pitch, i) => (
-                        <div key={i} className="flex flex-col items-center">
-                            <div className="transform scale-75 origin-top">
-                                <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
+                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-2 pb-1 bg-slate-50/50">
+                            {/* Adjusted Layout: Staff is contained, text is immediately below in same card */}
+                            <div className="relative w-full h-20 flex justify-center overflow-hidden">
+                                <div className="absolute top-[-20px] transform scale-[0.6]">
+                                    <Staff data={{ clef: 'treble', note: { pitch, duration: 'quarter' } }} />
+                                </div>
                             </div>
-                            <span className="text-sm font-bold mt-[-20px]">{pitch}</span>
+                            <div className="text-center mt-[-5px]">
+                                <div className="font-black text-slate-800 leading-tight">{pitch}</div>
+                                <div className="text-xs font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
+                            </div>
                         </div>
                      ))}
                   </div>
                </div>
                <div className="bg-white p-6 rounded-xl shadow-sm">
-                  <h4 className="font-bold text-center mb-4">ヘ音記号 (低音)</h4>
-                  <div className="flex flex-wrap justify-center gap-4">
+                  <h4 className="font-bold text-center mb-4 text-slate-600">ヘ音記号 (低音)</h4>
+                  <div className="grid grid-cols-3 gap-4">
                      {['C2', 'E2', 'G2', 'B2', 'C3', 'E3'].map((pitch, i) => (
-                        <div key={i} className="flex flex-col items-center">
-                            <div className="transform scale-75 origin-top">
-                                <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
+                        <div key={i} className="flex flex-col items-center border border-slate-100 rounded-lg p-2 pb-1 bg-slate-50/50">
+                            <div className="relative w-full h-20 flex justify-center overflow-hidden">
+                                <div className="absolute top-[-20px] transform scale-[0.6]">
+                                    <Staff data={{ clef: 'bass', note: { pitch, duration: 'quarter' } }} />
+                                </div>
                             </div>
-                            <span className="text-sm font-bold mt-[-20px]">{pitch}</span>
+                            <div className="text-center mt-[-5px]">
+                                <div className="font-black text-slate-800 leading-tight">{pitch}</div>
+                                <div className="text-xs font-bold text-indigo-500">{getPitchLabel(pitch)}</div>
+                            </div>
                         </div>
                      ))}
                   </div>
@@ -174,11 +407,13 @@ const App: React.FC = () => {
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">⏱️ 音符の種類・長さ</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 {Object.keys(DURATION_NAMES).map((key) => (
-                    <div key={key} className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center text-center">
-                        <div className="transform scale-50 origin-top h-24 w-full flex justify-center overflow-hidden">
-                             <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
+                    <div key={key} className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="relative w-full h-20 flex justify-center overflow-hidden">
+                             <div className="absolute top-[-20px] transform scale-[0.55]">
+                                <Staff data={{ clef: 'treble', note: { pitch: 'B4', duration: key as any } }} />
+                             </div>
                         </div>
-                        <span className="font-bold text-sm mt-2">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
+                        <span className="font-bold text-sm text-slate-700 mt-[-5px]">{DURATION_NAMES[key as keyof typeof DURATION_NAMES]}</span>
                     </div>
                 ))}
             </div>
@@ -187,13 +422,15 @@ const App: React.FC = () => {
            {/* Section 3: Symbols */}
            <section className="mb-12">
             <h3 className="text-xl font-bold text-slate-700 mb-4 border-b pb-2">🎼 記号・休符</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {MUSICAL_SYMBOLS.map((sym, i) => (
-                    <div key={i} className="bg-white p-4 rounded-xl shadow-sm flex flex-col items-center text-center">
-                        <div className="transform scale-50 origin-top h-28 w-full flex justify-center overflow-hidden">
-                             <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
+                    <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                         <div className="relative w-full h-24 flex justify-center overflow-hidden">
+                             <div className="absolute top-[-20px] transform scale-[0.55]">
+                                <Staff data={{ symbol: { type: sym.type as any, value: sym.value } }} />
+                             </div>
                         </div>
-                        <span className="font-bold text-xs mt-[-10px]">{sym.answer}</span>
+                        <span className="font-bold text-xs text-slate-700 mt-[-5px] leading-tight px-1 pb-1">{sym.answer}</span>
                     </div>
                 ))}
             </div>
@@ -210,11 +447,14 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
         {/* Header */}
         <div className="w-full max-w-3xl flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm">
-          <button onClick={() => setGameState({...gameState, status: 'menu'})} className="text-slate-500 hover:text-slate-700 font-medium">
+          <button onClick={() => setGameState(prev => ({...prev, status: 'menu'}))} className="text-slate-500 hover:text-slate-700 font-medium">
             &larr; メニュー
           </button>
           <div className="flex flex-col items-center">
-             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{gameState.difficulty.toUpperCase()}</span>
+             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                {gameState.difficulty.toUpperCase()} 
+                {gameState.isAdaptiveMode && <BrainCircuit size={14} className="text-pink-500"/>}
+             </span>
              <div className="flex gap-1 mt-1">
                 {gameState.questions.map((_, i) => (
                     <div key={i} className={`w-3 h-3 rounded-full ${i === gameState.currentQuestionIndex ? 'bg-indigo-600' : i < gameState.currentQuestionIndex ? 'bg-indigo-300' : 'bg-slate-200'}`} />
@@ -297,7 +537,7 @@ const App: React.FC = () => {
                   <RotateCcw size={20} /> もう一度挑戦する
               </button>
               <button 
-                  onClick={() => setGameState({...gameState, status: 'menu'})}
+                  onClick={() => setGameState(prev => ({...prev, status: 'menu'}))}
                   className="w-full bg-slate-100 text-slate-600 py-4 rounded-xl font-bold hover:bg-slate-200 transition-colors"
               >
                   メニューに戻る
@@ -346,6 +586,7 @@ const App: React.FC = () => {
       {gameState.status === 'reference' && renderReference()}
       {gameState.status === 'playing' && renderGame()}
       {gameState.status === 'result' && renderResult()}
+      {gameState.status === 'stats' && renderStats()}
     </div>
   );
 };

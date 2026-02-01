@@ -36,8 +36,27 @@ export interface RenderData {
 
 export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth' | 'thirty-second';
 
+export interface ItemStats {
+  correct: number;
+  wrong: number;
+}
+
+export interface DailyStats {
+  date: string; // YYYY-MM-DD
+  correct: number;
+  total: number;
+}
+
+export interface UserStorageData {
+  items: Record<string, ItemStats>; // For adaptive learning
+  daily: Record<string, DailyStats>; // Keyed by date string
+}
+
+// Legacy type alias if needed, or mapped
+export type UserStats = Record<string, ItemStats>;
+
 export interface GameState {
-  status: 'menu' | 'playing' | 'result' | 'reference';
+  status: 'menu' | 'playing' | 'result' | 'reference' | 'stats';
   difficulty: Difficulty;
   currentQuestionIndex: number;
   score: number;
@@ -47,4 +66,8 @@ export interface GameState {
     userAnswer: string;
     isCorrect: boolean;
   }[];
+  // Settings
+  isSoundEnabled: boolean;
+  selectedVoiceURI: string | null;
+  isAdaptiveMode: boolean;
 }
